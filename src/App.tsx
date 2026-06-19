@@ -102,6 +102,20 @@ export default function App() {
     window.history.pushState(null, '', '/' + tab);
   };
 
+  const fetchProfile = async () => {
+    if (!profile?.id) return;
+    try {
+      const res = await fetch(`/api/auth/profile?userId=${profile.id}`);
+      const data = await res.json();
+      if (data && data.success && data.user) {
+        setProfile(data.user);
+        localStorage.setItem('vaultpay_active_user', JSON.stringify(data.user));
+      }
+    } catch (err) {
+      console.error('Error fetching user profile:', err);
+    }
+  };
+
   // Fetch tokenized transactional database ledger rows
   const fetchLedger = async () => {
     try {
@@ -112,6 +126,7 @@ export default function App() {
       if (data && data.records) {
         setTransactions(data.records);
       }
+      await fetchProfile();
     } catch (err) {
       console.error('Handshake failed reading server transaction registry:', err);
     } finally {
@@ -345,6 +360,7 @@ export default function App() {
 
           {activeTab === 'history' && (
             <HistoryTab
+              userId={profile.id}
               transactions={transactions}
               onRefresh={fetchLedger}
               loading={loading}

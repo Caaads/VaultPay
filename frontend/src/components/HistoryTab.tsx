@@ -4,6 +4,7 @@ import {
   History, 
   RefreshCw, 
   ArrowUpRight, 
+  ArrowDownLeft,
   ShieldCheck, 
   Calendar, 
   CheckCircle2, 
@@ -11,7 +12,9 @@ import {
   Clock,
   ArrowRight,
   Download,
-  TrendingUp
+  TrendingUp,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface Transaction {
@@ -23,17 +26,21 @@ interface Transaction {
   memo: string;
   created_at: string;
   receiver_account?: string;
+  user_id?: string | null;
+  receiver_user_id?: string | null;
 }
 
 interface HistoryTabProps {
+  userId?: string;
   transactions: Transaction[];
   onRefresh: () => void;
   loading: boolean;
   onNavigate?: (tab: 'home' | 'history' | 'profile' | 'settings') => void;
 }
 
-export default function HistoryTab({ transactions, onRefresh, loading, onNavigate }: HistoryTabProps) {
+export default function HistoryTab({ userId, transactions, onRefresh, loading, onNavigate }: HistoryTabProps) {
   const [selectedTx, setSelectedTx] = React.useState<Transaction | null>(null);
+  const [showAll, setShowAll] = React.useState(false);
 
   // Download stylized file receipt logic
   const handleDownloadReceipt = (tx: Transaction) => {
@@ -288,42 +295,64 @@ export default function HistoryTab({ transactions, onRefresh, loading, onNavigat
                 <p className="text-[10px] text-slate-650">Go to Home, trigger a Bank Transfer or Mobile Express Send, and see it map instantly.</p>
               </div>
             ) : (
-              transactions.map((tx) => (
-                <button
-                  type="button"
-                  key={tx.id}
-                  onClick={() => setSelectedTx(tx)}
-                  className={`w-full text-left p-4 hover:bg-[#0c1224] transition flex items-center justify-between ${
-                    selectedTx?.id === tx.id ? 'bg-[#0f1d35]/30' : ''
-                  }`}
-                >
-                  <div className="flex items-start space-x-3 max-w-[70%]">
-                    <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/15 shrink-0 mt-0.5">
-                      <ArrowUpRight className="w-4 h-4" />
+              (showAll ? transactions : transactions.slice(0, 5)).map((tx) => {
+                const isIncoming = userId && tx.receiver_user_id === userId;
+                return (
+                  <button
+                    type="button"
+                    key={tx.id}
+                    onClick={() => setSelectedTx(tx)}
+                    className={`w-full text-left p-4 hover:bg-[#0c1224] transition flex items-center justify-between ${
+                      selectedTx?.id === tx.id ? 'bg-[#0f1d35]/30' : ''
+                    }`}
+                  >
+                    <div className="flex items-start space-x-3 max-w-[70%]">
+                      <div className={`p-2 rounded-xl border shrink-0 mt-0.5 ${
+                        isIncoming 
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15' 
+                          : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
+                      }`}>
+                        {isIncoming ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                      </div>
+                      <div className="truncate">
+                        <p className="text-xs font-bold text-slate-200 truncate">
+                          {isIncoming ? `Received from ${tx.sender}` : `Sent to ${tx.receiver}`}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5 font-mono">
+                          {tx.token.substring(0, 18)}...
+                        </p>
+                        {tx.memo && (
+                          <p className="text-[10px] text-slate-400 italic max-w-xs truncate mt-1">"{tx.memo}"</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="truncate">
-                      <p className="text-xs font-bold text-slate-200 truncate">{tx.receiver}</p>
-                      <p className="text-[10px] text-slate-500 truncate mt-0.5 font-mono">
-                        {tx.token.substring(0, 18)}...
-                      </p>
-                      {tx.memo && (
-                        <p className="text-[10px] text-slate-400 italic max-w-xs truncate mt-1">"{tx.memo}"</p>
-                      )}
-                    </div>
-                  </div>
 
-                  <div className="flex flex-col items-end shrink-0 space-y-1.5">
-                    <span className="text-xs font-bold font-mono text-emerald-400">
-                      ₱ {tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-mono">
-                      {new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                </button>
-              ))
+                    <div className="flex flex-col items-end shrink-0 space-y-1.5">
+                      <span className={`text-xs font-bold font-mono ${isIncoming ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isIncoming ? '+' : '-'} ₱ {tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        {new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
+
+          {transactions.length > 5 && (
+            <div className="p-3.5 bg-slate-950/60 border-t border-slate-800 text-center flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                className="inline-flex items-center space-x-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition duration-150 cursor-pointer py-1.5 px-4 rounded-xl hover:bg-slate-900 border border-slate-800"
+              >
+                <span>{showAll ? 'Show Fewer Logs' : `Show All Logs (${transactions.length})`}</span>
+                {showAll ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: Detailed Popover Receipt panel */}

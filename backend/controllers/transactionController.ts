@@ -89,37 +89,63 @@ export async function sendTransaction(req: Request, res: Response): Promise<void
     user_id: validUserId
   };
   try {
+    let newSenderBalance: number | undefined;
+
     if (validUserId) {
-      const { data: senderUser } = await supabase
+      const { data: senderUser, error: senderErr } = await supabase
         .from('users')
-        .select('phone, account_number')
+        .select('phone, account_number, balance')
         .eq('id', validUserId)
         .maybeSingle();
 
-      if (senderUser) {
-        if (paymentType === 'mobile') {
-          const cleanSenderPhone = senderUser.phone.replace(/\D/g, '').replace(/^0/, '63');
-          const cleanTargetPhone = cleanInput.replace(/\D/g, '').replace(/^0/, '63');
-          if (cleanSenderPhone === cleanTargetPhone) {
-            res.status(400).json({ error: 'Transaction canceled: You cannot send money to your own phone number.' });
-            return;
-          }
-        } else if (paymentType === 'bank') {
-          const cleanSenderAcc = senderUser.account_number.replace(/\D/g, '');
-          const cleanTargetAcc = cleanInput.replace(/\D/g, '');
-          if (cleanSenderAcc === cleanTargetAcc) {
-            res.status(400).json({ error: 'Transaction canceled: You cannot send money to your own account number.' });
-            return;
-          }
+      if (senderErr || !senderUser) {
+        res.status(400).json({ error: 'Sender account not found in database.' });
+        return;
+      }
+
+      const currentSenderBalance = parseFloat(senderUser.balance);
+      if (currentSenderBalance < parsedAmount) {
+        res.status(400).json({ error: 'Insufficient funds for this transaction.' });
+        return;
+      }
+
+      // Self-transfer checks
+      if (paymentType === 'mobile') {
+        const cleanSenderPhone = senderUser.phone.replace(/\D/g, '').replace(/^0/, '63');
+        const cleanTargetPhone = cleanInput.replace(/\D/g, '').replace(/^0/, '63');
+        if (cleanSenderPhone === cleanTargetPhone) {
+          res.status(400).json({ error: 'Transaction canceled: You cannot send money to your own phone number.' });
+          return;
+        }
+      } else if (paymentType === 'bank') {
+        const cleanSenderAcc = senderUser.account_number.replace(/\D/g, '');
+        const cleanTargetAcc = cleanInput.replace(/\D/g, '');
+        if (cleanSenderAcc === cleanTargetAcc) {
+          res.status(400).json({ error: 'Transaction canceled: You cannot send money to your own account number.' });
+          return;
         }
       }
+
+      // Deduct sender balance
+      newSenderBalance = currentSenderBalance - parsedAmount;
+      const { error: deductErr } = await supabase
+        .from('users')
+        .update({ balance: newSenderBalance })
+        .eq('id', validUserId);
+
+      if (deductErr) {
+        console.error("Deduct balance error:", deductErr);
+        throw new Error("Failed to deduct balance from sender.");
+      }
     }
+
+    let receiverUserId: string | null = null;
 
     if (paymentType === 'mobile') {
       const normPhone = '+' + cleanInput.replace(/\D/g, '');
       const { data: matchedUser, error: checkError } = await supabase
         .from('users')
-        .select('id')
+        .select('id, balance')
         .eq('phone', normPhone)
         .maybeSingle();
 
@@ -130,6 +156,20 @@ export async function sendTransaction(req: Request, res: Response): Promise<void
         res.status(400).json({ error: `Fulfillment rejected: Recipient phone number (${cleanInput}) is not registered in the VaultPay gateway.` });
         return;
       }
+
+      receiverUserId = matchedUser.id;
+
+      // Credit recipient balance
+      const newRecipientBalance = parseFloat(matchedUser.balance) + parsedAmount;
+      const { error: creditErr } = await supabase
+        .from('users')
+        .update({ balance: newRecipientBalance })
+        .eq('id', matchedUser.id);
+
+      if (creditErr) {
+        console.error("Credit balance error:", creditErr);
+        throw new Error("Failed to credit balance to recipient.");
+      }
     }
 
     const { data, error } = await supabase
@@ -138,6 +178,7 @@ export async function sendTransaction(req: Request, res: Response): Promise<void
         {
           id: newRecord.id,
           user_id: newRecord.user_id,
+          receiver_user_id: receiverUserId,
           sender: newRecord.sender,
           receiver: newRecord.receiver,
           amount: newRecord.amount,
@@ -181,7 +222,7 @@ export async function getTransactions(req: Request, res: Response): Promise<void
     let query = supabase.from('transactions').select('*');
     
     if (userId) {
-      query = query.eq('user_id', String(userId));
+      query = query.or(`user_id.eq.${userId},receiver_user_id.eq.${userId}`);
     }
 
     const { data, error } = await query.order('created_at', { ascending: false });

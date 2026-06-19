@@ -185,3 +185,40 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: `Secure profile registry synchronizer error: ${err.message}` });
   }
 }
+
+export async function getUserProfile(req: Request, res: Response): Promise<void> {
+  const { userId } = req.query;
+  if (!userId) {
+    res.status(400).json({ error: 'User ID is required.' });
+    return;
+  }
+
+  try {
+    const { data: userProfile, error: dbErr } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', String(userId))
+      .single();
+
+    if (dbErr || !userProfile) {
+      res.status(404).json({ error: 'User profile not found.' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        id: userProfile.id,
+        firstName: userProfile.first_name,
+        lastName: userProfile.last_name,
+        email: userProfile.email,
+        phone: userProfile.phone,
+        accountNumber: userProfile.account_number,
+        balance: parseFloat(userProfile.balance)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: `Error retrieving profile: ${err.message}` });
+  }
+}
+

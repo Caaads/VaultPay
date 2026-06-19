@@ -20,6 +20,7 @@ CREATE TABLE users (
 CREATE TABLE transactions (
   id TEXT PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  receiver_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   sender TEXT NOT NULL,
   receiver TEXT NOT NULL,
   amount NUMERIC(15, 2) NOT NULL,
