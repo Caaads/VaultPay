@@ -1,0 +1,6 @@
+{
+  "name": "VaultPay Secure Fintech Gateway Demonstration",
+  "description": "A highly secure Finch gateway mockup demonstrating mock PCI tokenization, secure transit, and parameterized database storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
